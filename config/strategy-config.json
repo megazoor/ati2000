@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "stopLossATR": 0.8,
+  "takeProfitATR": 3.2,
+  "useVwapFilter": false,
+  "useMacdFilter": false,
+  "tradingHoursOnly": false,
+  "tradingStartHour": 9,
+  "tradingEndHour": 16,
+  "maxTradesPerDay": 5,
+  "minimumConfidence": 0.7,
+  "whitelistedSymbols": ["BTC-USD", "ETH-USD"]
+}
