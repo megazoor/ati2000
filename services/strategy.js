@@ -1,11 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const coinbaseService = require('./coinbase');
+const dbService = require('./database');
 const { createLogger } = require('../config/logger');
 
 const logger = createLogger('strategy-service');
 const configPath = path.join(__dirname, '..', 'config', 'strategy-config.json');
-const tradesLogPath = path.join(__dirname, '..', 'logs', 'trades.json');
 
 // Default strategy configuration
 const defaultConfig = {
@@ -62,38 +62,69 @@ class StrategyService {
   }
 
   // Load trade history
-  loadTrades() {
+  async loadTrades() {
     try {
-      if (fs.existsSync(tradesLogPath)) {
-        const data = fs.readFileSync(tradesLogPath, 'utf8');
-        return JSON.parse(data);
-      }
-      return { trades: [] };
+      const trades = await dbService.getTradeHistory(100);
+      return { trades };
     } catch (error) {
-      logger.error(`Error loading trades: ${error.message}`);
+      logger.error(`Error loading trades from database: ${error.message}`);
+      
+      // Fallback to file-based if available
+      try {
+        const tradesLogPath = path.join(__dirname, '..', 'logs', 'trades.json');
+        if (fs.existsSync(tradesLogPath)) {
+          const data = fs.readFileSync(tradesLogPath, 'utf8');
+          return JSON.parse(data);
+        }
+      } catch (fileError) {
+        logger.error(`Error loading trades from file: ${fileError.message}`);
+      }
+      
       return { trades: [] };
     }
   }
 
-  // Save trade to log
-  saveTrade(trade) {
+  // Save trade to database
+  async saveTrade(trade) {
     try {
-      this.trades.trades.push({
+      const tradeData = {
         ...trade,
         timestamp: new Date().toISOString()
-      });
-      fs.writeFileSync(tradesLogPath, JSON.stringify(this.trades, null, 2), 'utf8');
-      logger.info(`Trade saved: ${trade.action} ${trade.ticker} at ${trade.price}`);
+      };
+      
+      // Save to MongoDB
+      await dbService.saveTrade(tradeData);
+      
+      // Also update local cache
+      this.trades.trades.push(tradeData);
+      
+      // Optionally still save to file as backup
+      try {
+        const tradesLogPath = path.join(__dirname, '..', 'logs', 'trades.json');
+        fs.writeFileSync(tradesLogPath, JSON.stringify(this.trades, null, 2), 'utf8');
+      } catch (fileError) {
+        logger.warn(`Couldn't save trade to file backup: ${fileError.message}`);
+      }
+      
+      logger.info(`Trade saved to database: ${trade.action} ${trade.ticker} at ${trade.price}`);
       return true;
     } catch (error) {
-      logger.error(`Error saving trade: ${error.message}`);
+      logger.error(`Error saving trade to database: ${error.message}`);
       return false;
     }
   }
 
   // Get trade history
-  getTradeHistory(limit = 20) {
-    return this.trades.trades.slice(-limit).reverse();
+  async getTradeHistory(limit = 20) {
+    try {
+      // Try to get from database
+      const trades = await dbService.getTradeHistory(limit);
+      return trades;
+    } catch (error) {
+      logger.error(`Error getting trade history from database: ${error.message}`);
+      // Fall back to in-memory cache if database fails
+      return this.trades.trades.slice(-limit).reverse();
+    }
   }
 
   // Update strategy configuration
@@ -237,10 +268,11 @@ class StrategyService {
         stopLoss: stopLossPrice,
         takeProfit: takeProfitPrice,
         orderId: orderResult.order_id,
-        confidence: signal.confidence || null
+        confidence: signal.confidence || null,
+        entryPrice: signal.action === 'SELL' ? this.currentPosition?.entryPrice : entryPrice
       };
       
-      this.saveTrade(tradeRecord);
+      await this.saveTrade(tradeRecord);
       
       // Update current position
       this.currentPosition = signal.action === 'BUY' ? {
@@ -272,29 +304,99 @@ class StrategyService {
   }
 
   // Get strategy metrics
-  getMetrics() {
-    const trades = this.trades.trades;
-    
-    // Calculate win rate
-    const winTrades = trades.filter(trade => 
-      trade.action === 'SELL' && trade.price > trade.entryPrice
-    ).length;
-    
-    const lossTrades = trades.filter(trade => 
-      trade.action === 'SELL' && trade.price < trade.entryPrice
-    ).length;
-    
-    const totalCompletedTrades = winTrades + lossTrades;
-    const winRate = totalCompletedTrades > 0 ? (winTrades / totalCompletedTrades) : 0;
-    
-    return {
-      totalTrades: trades.length,
-      completedTrades: totalCompletedTrades,
-      winTrades,
-      lossTrades,
-      winRate,
-      config: this.config
-    };
+  async getMetrics() {
+    try {
+      // Get trades from database
+      const trades = await dbService.getTradeHistory(1000);
+      
+      // Calculate win rate
+      const winTrades = trades.filter(trade => 
+        trade.action === 'SELL' && trade.price > trade.entryPrice
+      ).length;
+      
+      const lossTrades = trades.filter(trade => 
+        trade.action === 'SELL' && trade.price < trade.entryPrice
+      ).length;
+      
+      const totalCompletedTrades = winTrades + lossTrades;
+      const winRate = totalCompletedTrades > 0 ? (winTrades / totalCompletedTrades) : 0;
+
+      // Calculate profit metrics
+      let totalProfit = 0;
+      let profitPercentage = 0;
+      
+      // Group trades by ticker for proper P&L calculation
+      const tradesByTicker = {};
+      trades.forEach(trade => {
+        if (!tradesByTicker[trade.ticker]) {
+          tradesByTicker[trade.ticker] = [];
+        }
+        tradesByTicker[trade.ticker].push(trade);
+      });
+      
+      // Calculate profit for each ticker
+      Object.values(tradesByTicker).forEach(tickerTrades => {
+        let position = null;
+        tickerTrades.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).forEach(trade => {
+          if (trade.action === 'BUY') {
+            position = {
+              price: trade.price,
+              size: trade.size
+            };
+          } else if (trade.action === 'SELL' && position) {
+            const tradeProfit = (trade.price - position.price) * position.size;
+            const tradeProfitPercentage = ((trade.price - position.price) / position.price) * 100;
+            
+            totalProfit += tradeProfit;
+            profitPercentage += tradeProfitPercentage;
+            
+            position = null;
+          }
+        });
+      });
+      
+      const metrics = {
+        totalTrades: trades.length,
+        completedTrades: totalCompletedTrades,
+        winTrades,
+        lossTrades,
+        winRate,
+        totalProfit: parseFloat(totalProfit.toFixed(2)),
+        profitPercentage: parseFloat(profitPercentage.toFixed(2)),
+        config: this.config,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      // Save metrics to database for historical tracking
+      await dbService.saveTradeMetrics(metrics);
+      
+      return metrics;
+    } catch (error) {
+      logger.error(`Error calculating metrics from database: ${error.message}`);
+      
+      // Fall back to in-memory data if database fails
+      const trades = this.trades.trades;
+      
+      const winTrades = trades.filter(trade => 
+        trade.action === 'SELL' && trade.price > trade.entryPrice
+      ).length;
+      
+      const lossTrades = trades.filter(trade => 
+        trade.action === 'SELL' && trade.price < trade.entryPrice
+      ).length;
+      
+      const totalCompletedTrades = winTrades + lossTrades;
+      const winRate = totalCompletedTrades > 0 ? (winTrades / totalCompletedTrades) : 0;
+      
+      return {
+        totalTrades: trades.length,
+        completedTrades: totalCompletedTrades,
+        winTrades,
+        lossTrades,
+        winRate,
+        config: this.config
+      };
+    }
   }
 }
 

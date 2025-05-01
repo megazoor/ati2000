@@ -23,6 +23,12 @@ if [ ! -f .env ] && [ -f ~/.env_advancedtraderai ]; then
   cp ~/.env_advancedtraderai .env
 fi
 
+# Ensure MongoDB URI is in the environment file
+if ! grep -q "MONGODB_URI" .env; then
+  echo "Adding MongoDB URI to .env file..."
+  echo "MONGODB_URI=${MONGODB_URI:-mongodb+srv://aisupertraderadmin:231fvYzRQ8kl26zh@cluster0.mpq0dqh.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0}" >> .env
+fi
+
 # Create or update the PM2 process
 if pm2 list | grep -q "advancedtraderai"; then
   echo "Restarting application..."

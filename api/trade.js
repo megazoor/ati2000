@@ -31,10 +31,10 @@ const authenticateDashboard = (req, res, next) => {
 };
 
 // GET /api/trade/history - Get trade history
-router.get('/history', authenticateDashboard, (req, res) => {
+router.get('/history', authenticateDashboard, async (req, res) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit) : 20;
-    const trades = strategyService.getTradeHistory(limit);
+    const trades = await strategyService.getTradeHistory(limit);
     
     res.status(200).json({ trades });
   } catch (error) {
@@ -83,9 +83,9 @@ router.post('/manual', authenticateDashboard, async (req, res) => {
 });
 
 // GET /api/trade/metrics - Get trading metrics
-router.get('/metrics', authenticateDashboard, (req, res) => {
+router.get('/metrics', authenticateDashboard, async (req, res) => {
   try {
-    const metrics = strategyService.getMetrics();
+    const metrics = await strategyService.getMetrics();
     res.status(200).json(metrics);
   } catch (error) {
     logger.error(`Error getting trading metrics: ${error.message}`);

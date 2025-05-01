@@ -43,12 +43,14 @@ const webhookRoutes = require('./api/webhook');
 const tradeRoutes = require('./api/trade');
 const statusRoutes = require('./api/status');
 const healthRoutes = require('./api/health');
+const analyticsRoutes = require('./api/analytics');
 
 // Use routes
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/trade', tradeRoutes);
 app.use('/api/status', statusRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
@@ -65,7 +67,36 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
+// Import database service
+const dbService = require('./services/database');
+
 // Start the server
-app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   logger.info(`Server running on port ${PORT}`);
+  
+  // Initialize database connection
+  try {
+    await dbService.connect();
+    logger.info('MongoDB connection established');
+  } catch (error) {
+    logger.error(`Failed to connect to MongoDB: ${error.message}`);
+    logger.warn('Server running with limited functionality - using file-based storage');
+  }
+});
+
+// Clean up on server close
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM signal received: closing HTTP server');
+  await dbService.close();
+  server.close(() => {
+    logger.info('HTTP server closed');
+  });
+});
+
+process.on('SIGINT', async () => {
+  logger.info('SIGINT signal received: closing HTTP server');
+  await dbService.close();
+  server.close(() => {
+    logger.info('HTTP server closed');
+  });
 });

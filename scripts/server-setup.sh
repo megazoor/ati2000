@@ -130,6 +130,7 @@ PORT=3000
 NODE_ENV=production
 WEBHOOK_SECRET=your_webhook_secret_here
 ALLOWED_IPS=your_tradingview_ip_here
+MONGODB_URI=mongodb+srv://aisupertraderadmin:231fvYzRQ8kl26zh@cluster0.mpq0dqh.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
 EOF
 chown $USERNAME:$USERNAME $HOME_DIR/.env_advancedtraderai
 chmod 600 $HOME_DIR/.env_advancedtraderai

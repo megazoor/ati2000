@@ -1,12 +1,10 @@
-# AdvancedTraderAI
+# ATI2000 - Advanced Trader AI
 
 A self-hosted crypto trading automation platform powered by TradingView signals and Coinbase Advanced, featuring a secure Next.js dashboard.
 
-![Dashboard Preview](https://placeholder-image.com/800x450)
-
 ## 🚀 Overview
 
-AdvancedTraderAI automates cryptocurrency trading strategies by:
+ATI2000 automates cryptocurrency trading strategies by:
 
 1. Receiving signals from TradingView alerts via webhooks
 2. Validating and processing signals against configurable criteria
@@ -22,8 +20,11 @@ The platform is designed to be self-hosted on your own server (such as Linode) a
 - **Trading Filters**: Optional VWAP and MACD filters for additional trade confirmation
 - **Secure Dashboard**: Password-protected Next.js frontend with real-time trading data
 - **Trade History**: Complete logs of all executed trades with performance metrics
+- **MongoDB Integration**: Store all trading data in MongoDB Atlas for advanced analytics
+- **Advanced Analytics**: Historical performance metrics, symbol-based analysis, and time-series data
 - **IP Whitelisting**: Restrict webhook access to trusted sources (optional)
 - **Configuration UI**: Intuitive interface for adjusting trading parameters
+- **CI/CD Pipeline**: Automated deployment to Linode using GitHub Actions
 
 ## 📋 Requirements
 
@@ -42,8 +43,8 @@ The platform is designed to be self-hosted on your own server (such as Linode) a
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/advancedtraderai.git
-   cd advancedtraderai
+   git clone https://github.com/megazoor/ati2000.git
+   cd ati2000
    ```
 
 2. Install backend dependencies:
@@ -66,6 +67,7 @@ The platform is designed to be self-hosted on your own server (such as Linode) a
    NODE_ENV=development
    WEBHOOK_SECRET=your_webhook_secret_here
    ALLOWED_IPS=your_ip_here
+   MONGODB_URI=mongodb+srv://aisupertraderadmin:231fvYzRQ8kl26zh@cluster0.mpq0dqh.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
    ```
 
 5. Start the development server:
@@ -83,6 +85,50 @@ The platform is designed to be self-hosted on your own server (such as Linode) a
 ### Production Deployment
 
 For detailed production deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+For CI/CD pipeline setup instructions, see [CICD.md](CICD.md).
+
+## Deployment Steps
+
+### 1. Set Up a Linode Server
+
+1. Create a Linode instance (4GB RAM recommended)
+2. Connect to your server via SSH as root
+3. Run the server setup script:
+   ```bash
+   # Upload the script to your server
+   scp scripts/server-setup.sh root@your_server_ip:/root/
+   
+   # Execute the script providing a username and domain
+   ssh root@your_server_ip 'bash /root/server-setup.sh tradingbot yourdomain.com'
+   ```
+
+### 2. Configure GitHub Actions
+
+1. In your GitHub repository, go to Settings > Secrets and variables > Actions
+2. Add the following repository secrets:
+   - `LINODE_HOST`: Your server's IP or domain name
+   - `LINODE_USER`: Username you created on the server (e.g., tradingbot)
+   - `LINODE_SSH_KEY`: Your private SSH key content
+
+### 3. Configure Environment Variables on Server
+
+1. SSH into your server as the deployment user
+2. Edit the environment file:
+   ```bash
+   nano ~/.env_advancedtraderai
+   ```
+3. Update with your actual Coinbase API credentials and other settings
+
+### 4. Push Changes to GitHub
+
+The GitHub Actions workflow will automatically deploy your application when you push to the main branch:
+
+```bash
+git push origin main
+```
+
+For more detailed information, check [CICD.md](CICD.md).
 
 ## 📱 Usage
 
@@ -103,85 +149,20 @@ For detailed production deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.
 3. Set the webhook URL to: `https://your-server.com/api/webhook/tradingview`
 4. Add the header: `X-Webhook-Secret: your_webhook_secret_here`
 
-### Dashboard Navigation
+## 📊 Monitoring
 
-- **Dashboard**: View current position, performance metrics, and recent trades
-- **Trades**: Detailed trade history with filtering and sorting options
-- **Settings**: Configure trading parameters, risk management, and symbol whitelist
+Monitor your application's health using the built-in health endpoint:
 
-## ⚙️ Configuration
-
-### Strategy Configuration
-
-The platform features a web-based configuration interface to adjust:
-
-- Trading status (enabled/disabled)
-- Trading hours restrictions
-- Maximum trades per day
-- Stop loss and take profit levels (ATR multipliers)
-- Minimum trade confidence threshold
-- Trading filters (VWAP, MACD)
-- Symbol whitelist
-
-### Advanced Configuration
-
-For advanced settings that aren't exposed in the UI, you can modify:
-
-- `config/strategy-config.json`: Core trading parameters
-- `.env`: Environment variables and API credentials
-
-## 🔐 Security
-
-AdvancedTraderAI implements several security features:
-
-- **Password Protection**: Dashboard access requires a password
-- **Webhook Validation**: Webhook endpoints verify a shared secret
-- **IP Whitelisting**: Only allow requests from trusted IPs
-- **Rate Limiting**: Prevent brute force attempts on the API
-- **HTTPS**: Production deployment uses SSL/TLS encryption
-
-## 📊 Logging and Monitoring
-
-The platform provides comprehensive logging:
-
-- **Trade Logs**: All trades are logged with full details
-- **Server Logs**: Application events and errors are tracked
-- **Performance Metrics**: Track win rate, total trades, and more
-- **Status Monitoring**: Check bot status and current positions
-
-## 🧩 Project Structure
-
-```
-/advancedtraderai
-├── api/                 # API route handlers
-│   ├── webhook.js       # Webhook endpoints
-│   ├── trade.js         # Trade management endpoints
-│   └── status.js        # Status information endpoints
-├── services/            # Core business logic
-│   ├── coinbase.js      # Coinbase API integration
-│   └── strategy.js      # Trading strategy implementation
-├── logs/                # Log storage
-│   └── trades.json      # Trade history log
-├── config/              # Configuration files
-│   └── logger.js        # Logging configuration
-├── dashboard/           # Next.js frontend
-│   └── app/             # App Router structure
-│       ├── components/  # Reusable UI components
-│       ├── dashboard/   # Dashboard page
-│       ├── trades/      # Trade history page
-│       └── settings/    # Configuration page
-├── .env                 # Environment variables
-├── server.js            # Main application entry point
-└── ecosystem.config.js  # PM2 process manager config
+```bash
+curl https://yourdomain.com/api/health
 ```
 
-## 📝 License
+You can also set up automated monitoring using the provided script:
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+```bash
+# On your server or monitoring system
+./scripts/monitor.js https://yourdomain.com https://webhook-url-for-notifications
+```
 
 ## ⚠️ Disclaimer
 
